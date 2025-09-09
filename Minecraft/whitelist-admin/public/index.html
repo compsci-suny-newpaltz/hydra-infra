@@ -1,0 +1,90 @@
+<!doctype html>
+<html>
+<head>
+  <meta charset="utf-8" />
+  <title>Minecraft Whitelist Admin</title>
+  <meta name="viewport" content="width=device-width,initial-scale=1" />
+  <style>
+    body { font-family: system-ui, sans-serif; max-width: 720px; margin: 2rem auto; padding: 0 1rem; }
+    form, .card { border: 1px solid #ddd; padding: 1rem; border-radius: 8px; margin-bottom: 1rem; }
+    input[type=text]{ padding:.5rem; width: 100%; max-width: 320px; }
+    button{ padding:.5rem .75rem; cursor:pointer }
+    .row{ display:flex; gap:.5rem; align-items:center; margin-top:.5rem;}
+    ul{ padding-left:1.25rem }
+    code{ background:#f6f8fa; padding:.2rem .4rem; border-radius:4px }
+  </style>
+</head>
+<body>
+  <h1>Minecraft Whitelist Admin</h1>
+
+  <div class="card">
+    <button id="btnEnable">Enable Whitelist</button>
+    <button id="btnRefresh">Refresh Whitelist</button>
+    <pre id="status"></pre>
+  </div>
+
+  <form id="addForm">
+    <h3>Add Player</h3>
+    <div class="row">
+      <input id="addName" type="text" placeholder="Minecraft username" required />
+      <button type="submit">Add</button>
+    </div>
+  </form>
+
+  <form id="removeForm">
+    <h3>Remove Player</h3>
+    <div class="row">
+      <input id="removeName" type="text" placeholder="Minecraft username" required />
+      <button type="submit">Remove</button>
+    </div>
+  </form>
+
+  <div class="card">
+    <h3>Whitelisted Players</h3>
+    <ul id="list"></ul>
+  </div>
+
+  <script>
+    async function api(path, options){
+      const res = await fetch(path, { headers:{ "Content-Type":"application/json" }, ...options });
+      const data = await res.json();
+      if(!res.ok) throw new Error(data.error || "Request failed");
+      return data;
+    }
+    async function refresh(){
+      try{
+        const st = await api("/api/status");
+        document.getElementById("status").textContent = JSON.stringify(st, null, 2);
+        const lst = await api("/api/list");
+        const ul = document.getElementById("list");
+        ul.innerHTML = "";
+        lst.names.forEach(n => {
+          const li = document.createElement("li"); li.textContent = n; ul.appendChild(li);
+        });
+      }catch(e){
+        document.getElementById("status").textContent = "Error: " + e.message;
+      }
+    }
+    document.getElementById("btnEnable").onclick = async () => {
+      try { await api("/api/enable", { method:"POST" }); await refresh(); } catch(e){ alert(e.message); }
+    };
+    document.getElementById("btnRefresh").onclick = refresh;
+
+    document.getElementById("addForm").onsubmit = async (ev) => {
+      ev.preventDefault();
+      const name = document.getElementById("addName").value.trim();
+      if(!name) return;
+      try{ await api("/api/add", { method:"POST", body: JSON.stringify({ name }) }); document.getElementById("addName").value=""; await refresh(); } catch(e){ alert(e.message); }
+    };
+    document.getElementById("removeForm").onsubmit = async (ev) => {
+      ev.preventDefault();
+      const name = document.getElementById("removeName").value.trim();
+      if(!name) return;
+      try{ await api("/api/remove", { method:"POST", body: JSON.stringify({ name }) }); document.getElementById("removeName").value=""; await refresh(); } catch(e){ alert(e.message); }
+    };
+
+    refresh();
+  </script>
+</body>
+</html>
+
