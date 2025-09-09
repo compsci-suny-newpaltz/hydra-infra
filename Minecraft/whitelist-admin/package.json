@@ -10,7 +10,9 @@
     "express": "^4.19.2",
     "rcon-client": "^4.2.5",
     "body-parser": "^1.20.2",
-    "jose": "^5.9.6"
+    "jose": "^5.9.6",
+    "dotenv": "^17.2.2",
+    "cookie-parser": "^1.4.7"
   }
 }
 

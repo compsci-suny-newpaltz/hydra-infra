@@ -53,9 +53,9 @@
     }
     async function refresh(){
       try{
-        const st = await api("/api/status");
+        const st = await api("api/status");
         document.getElementById("status").textContent = JSON.stringify(st, null, 2);
-        const lst = await api("/api/list");
+        const lst = await api("api/list");
         const ul = document.getElementById("list");
         ul.innerHTML = "";
         lst.names.forEach(n => {
@@ -66,7 +66,7 @@
       }
     }
     document.getElementById("btnEnable").onclick = async () => {
-      try { await api("/api/enable", { method:"POST" }); await refresh(); } catch(e){ alert(e.message); }
+      try { await api("api/enable", { method:"POST" }); await refresh(); } catch(e){ alert(e.message); }
     };
     document.getElementById("btnRefresh").onclick = refresh;
 
@@ -74,13 +74,13 @@
       ev.preventDefault();
       const name = document.getElementById("addName").value.trim();
       if(!name) return;
-      try{ await api("/api/add", { method:"POST", body: JSON.stringify({ name }) }); document.getElementById("addName").value=""; await refresh(); } catch(e){ alert(e.message); }
+      try{ await api("api/add", { method:"POST", body: JSON.stringify({ name }) }); document.getElementById("addName").value=""; await refresh(); } catch(e){ alert(e.message); }
     };
     document.getElementById("removeForm").onsubmit = async (ev) => {
       ev.preventDefault();
       const name = document.getElementById("removeName").value.trim();
       if(!name) return;
-      try{ await api("/api/remove", { method:"POST", body: JSON.stringify({ name }) }); document.getElementById("removeName").value=""; await refresh(); } catch(e){ alert(e.message); }
+      try{ await api("api/remove", { method:"POST", body: JSON.stringify({ name }) }); document.getElementById("removeName").value=""; await refresh(); } catch(e){ alert(e.message); }
     };
 
     refresh();
