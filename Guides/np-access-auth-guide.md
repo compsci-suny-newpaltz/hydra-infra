@@ -2,7 +2,7 @@
 
 ## 🔐 Overview
 
-NP Access is a centralized authentication service that abstracts Azure AD complexities behind a simple JWT-based API. This guide demonstrates how to integrate NP Access authentication into your New Paltz web applications.
+NP Access is a centralized authentication service that abstracts Azure AD complexities behind a simple JWT-based API. This guide demonstrates how to integrate NP Access authentication into your New Paltz web applications hosted on the Hydra server at `hydra.newpaltz.edu/students/{username}/{project}/`.
 
 > **💡 Industry Insight**
 > 
@@ -49,6 +49,14 @@ graph LR
     G -->|6. Set np_access cookie| A
 ```
 
+> **🍪 Cookie Domain Advantage**
+>
+> Since all student projects are hosted on `hydra.newpaltz.edu`, the `np_access` cookie is automatically available to all projects on the domain. This means:
+> - Single sign-on across all student projects
+> - No CORS issues between projects
+> - Seamless authentication experience
+> - Similar to how Google services (Gmail, Drive, Calendar) share auth cookies on the `google.com` domain
+
 ---
 
 ## Authentication Lifecycle
@@ -79,6 +87,54 @@ The `np_access` token contains:
 
 ## Implementation Examples
 
+### Project URL Structure
+
+Student projects on Hydra follow a specific URL pattern:
+
+```
+https://hydra.newpaltz.edu/students/{username}/{project_name}/
+```
+
+For example:
+- `https://hydra.newpaltz.edu/students/manzim1/minecraft-dashboard/`
+- `https://hydra.newpaltz.edu/students/smithj2/grade-tracker/`
+- `https://hydra.newpaltz.edu/students/doej5/course-scheduler/`
+
+> **📁 Directory Structure**
+>
+> Your project files should be deployed to:
+> `/home/{username}/public_html/{project_name}/`
+> 
+> This maps to the public URL:
+> `https://hydra.newpaltz.edu/students/{username}/{project_name}/`
+
+When setting the `RETURN_TO` environment variable, always use your full project URL to ensure users are redirected back to your application after authentication.
+
+#### Environment Configuration Example
+
+Create a `.env` file in your project directory:
+
+```bash
+# .env file for student project
+HYDRA_BASE_URL=https://hydra.newpaltz.edu
+RETURN_TO=https://hydra.newpaltz.edu/students/manzim1/minecraft-dashboard/
+APP_PORT=3000
+NODE_ENV=production
+
+# For local development
+# RETURN_TO=http://localhost:3000/
+```
+
+> **💡 Pro Tip**
+>
+> Use environment variables to switch between local development and production:
+> ```javascript
+> const isDevelopment = process.env.NODE_ENV !== 'production';
+> const DEFAULT_RETURN_TO = isDevelopment 
+>   ? 'http://localhost:3000/' 
+>   : `https://hydra.newpaltz.edu/students/${process.env.USERNAME}/${process.env.PROJECT_NAME}/`;
+> ```
+
 ### Node.js (Express)
 
 ```javascript
@@ -91,7 +147,8 @@ app.use(cookieParser());
 
 // Configuration
 const HYDRA_BASE_URL = process.env.HYDRA_BASE_URL || 'https://hydra.newpaltz.edu';
-const DEFAULT_RETURN_TO = process.env.RETURN_TO || 'https://yourapp.newpaltz.edu/';
+// Student projects are hosted at: hydra.newpaltz.edu/students/{username}/{project_name}
+const DEFAULT_RETURN_TO = process.env.RETURN_TO || 'https://hydra.newpaltz.edu/students/manzim1/myproject/';
 
 // Token verification function
 async function verifyWithHydra(token) {
@@ -165,7 +222,8 @@ app.get('/api/me', (req, res) => {
 <?php
 // config.php
 define('HYDRA_BASE_URL', getenv('HYDRA_BASE_URL') ?: 'https://hydra.newpaltz.edu');
-define('DEFAULT_RETURN_TO', getenv('RETURN_TO') ?: 'https://yourapp.newpaltz.edu/');
+// Student projects: hydra.newpaltz.edu/students/{username}/{project_name}
+define('DEFAULT_RETURN_TO', getenv('RETURN_TO') ?: 'https://hydra.newpaltz.edu/students/manzim1/myproject/');
 
 // HydraAuth.php
 class HydraAuth {
@@ -264,7 +322,8 @@ public class HydraAuthConfig implements WebMvcConfigurer {
     @Value("${hydra.base-url:https://hydra.newpaltz.edu}")
     private String hydraBaseUrl;
     
-    @Value("${app.return-to:https://yourapp.newpaltz.edu/}")
+    // Student projects: hydra.newpaltz.edu/students/{username}/{project_name}
+    @Value("${app.return-to:https://hydra.newpaltz.edu/students/manzim1/myproject/}")
     private String defaultReturnTo;
     
     @Override
@@ -412,7 +471,8 @@ from flask import request, jsonify, redirect, g
 from urllib.parse import quote
 
 HYDRA_BASE_URL = os.getenv('HYDRA_BASE_URL', 'https://hydra.newpaltz.edu')
-DEFAULT_RETURN_TO = os.getenv('RETURN_TO', 'https://yourapp.newpaltz.edu/')
+# Student projects: hydra.newpaltz.edu/students/{username}/{project_name}
+DEFAULT_RETURN_TO = os.getenv('RETURN_TO', 'https://hydra.newpaltz.edu/students/manzim1/myproject/')
 
 def verify_token(token):
     """Verify token with Hydra service"""
@@ -585,13 +645,16 @@ app.get('/api/resource', requireHydraLogin, (req, res) => {
 
 #### 1. **Always Use HTTPS**
 ```javascript
-// Force HTTPS in production
+// Hydra automatically serves all student projects over HTTPS
+// But if you're developing locally or on a different server:
 app.use((req, res, next) => {
   if (process.env.NODE_ENV === 'production' && !req.secure) {
     return res.redirect('https://' + req.headers.host + req.url);
   }
   next();
 });
+
+// Note: All hydra.newpaltz.edu/students/* URLs are HTTPS by default
 ```
 
 #### 2. **Token Refresh Strategy**
@@ -675,18 +738,37 @@ function debugAuth(req) {
   console.log('Cookies:', req.cookies);
   console.log('Headers:', req.headers);
   console.log('Token present:', !!req.cookies?.np_access);
+  console.log('Cookie domain:', req.cookies?.np_access?.domain);
 }
+```
+
+#### Path-Related Issues
+```javascript
+// Common issue: Incorrect base path in student projects
+// Solution: Use relative paths or configure base URL
+
+// For Express apps hosted at /students/username/project/
+app.use('/students/manzim1/myproject', express.static('public'));
+
+// Or set a base path environment variable
+const BASE_PATH = process.env.BASE_PATH || '/students/manzim1/myproject';
+app.use(BASE_PATH, router);
 ```
 
 #### CORS Issues
 ```javascript
-// Configure CORS for API access
+// Since all student projects are on hydra.newpaltz.edu, 
+// CORS is typically not an issue for same-origin requests
+// However, if you need to access from other domains:
 const cors = require('cors');
 
 app.use(cors({
-  origin: 'https://allowed-domain.newpaltz.edu',
+  origin: ['https://hydra.newpaltz.edu', 'https://newpaltz.edu'],
   credentials: true // Allow cookies
 }));
+
+// Note: Student projects on the same hydra.newpaltz.edu domain
+// share the same origin, so cookies work seamlessly!
 ```
 
 #### Session vs Token Confusion
@@ -718,8 +800,10 @@ app.get('/api/profile', requireHydraLogin, (req, res) => {
 
 - [ ] Cookie name is exactly `np_access`
 - [ ] HYDRA_BASE_URL is correctly configured
-- [ ] Using HTTPS in production
-- [ ] Cookies have correct domain/path
+- [ ] Project URL follows pattern: `https://hydra.newpaltz.edu/students/{username}/{project}/`
+- [ ] Return URL matches your actual project location
+- [ ] Using HTTPS (automatic on Hydra)
+- [ ] Cookies have correct domain/path (`.hydra.newpaltz.edu`)
 - [ ] Token hasn't expired
 - [ ] `/check` endpoint is accessible
 - [ ] Return URL is properly encoded
@@ -799,18 +883,21 @@ NP Access provides a streamlined authentication solution that:
 - **Follows Industry Standards**: Similar to Auth0, Okta, Firebase Auth
 - **Enables Microservices**: Stateless authentication across services
 - **Reduces Complexity**: No direct Azure AD interaction needed
+- **Seamless SSO**: All student projects on `hydra.newpaltz.edu` share authentication
 
 > **🚀 Next Steps**
 >
-> 1. Implement basic authentication using the examples above
-> 2. Add role-based access control for your use case
-> 3. Implement audit logging and monitoring
-> 4. Consider token caching for high-traffic applications
-> 5. Review security best practices quarterly
+> 1. Deploy your project to `/home/{username}/public_html/{project_name}/`
+> 2. Set your `RETURN_TO` to `https://hydra.newpaltz.edu/students/{username}/{project_name}/`
+> 3. Implement basic authentication using the examples above
+> 4. Add role-based access control for your use case
+> 5. Test locally first, then deploy to Hydra
+> 6. Implement audit logging and monitoring
+> 7. Consider token caching for high-traffic applications
 
 For additional support, contact the New Paltz IT Services or refer to the official Hydra documentation.
 
 ---
 
-*Last updated: 2024*
+*Last updated: 2025*
 *Version: 1.0.0*
