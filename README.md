@@ -7,7 +7,8 @@ A comprehensive infrastructure repository for New Paltz University's Hydra authe
 ```
 hydra-infra/
 ├── Chimera/                    # AI/ML Services (Ollama + Open WebUI)
-├── Minecraft/                  # Minecraft Server with Whitelist Management
+├── Minecraft-Server/           # Minecraft Server with Whitelist Management
+├── Hydra/                      # Hydra Authentication Services
 ├── Guides/                     # Documentation and Integration Guides
 └── README.md                   # This file
 ```
@@ -36,7 +37,7 @@ A complete AI/ML platform combining Ollama (local LLM server) with Open WebUI fo
 - Hydra SAML Auth: `6969`
 
 ### 2. Minecraft Server with Management
-**Location**: `Minecraft/`
+**Location**: `Minecraft-Server/`
 
 A complete Minecraft server setup with role-based whitelist management and web administration interface.
 
@@ -56,7 +57,17 @@ A complete Minecraft server setup with role-based whitelist management and web a
 - Minecraft Server: `25565`
 - Whitelist Admin: `3000`
 
-### 3. Authentication & Documentation
+### 3. Hydra Authentication Services
+**Location**: `Hydra/`
+
+Core authentication services and configurations for the Hydra system.
+
+**Components**:
+- Authentication service configurations
+- SAML integration components
+- Service definitions and deployments
+
+### 4. Authentication & Documentation
 **Location**: `Guides/`
 
 Comprehensive documentation for integrating with the Hydra authentication system.
@@ -85,7 +96,7 @@ WEBUI_DOCKER_TAG=main
 OPEN_WEBUI_PORT=3000
 ```
 
-**Minecraft/.env**:
+**Minecraft-Server/.env**:
 ```bash
 RCON_PASSWORD=your_secure_rcon_password
 ```
@@ -100,13 +111,13 @@ docker-compose up -d
 
 #### Minecraft Server
 ```bash
-cd Minecraft/
+cd Minecraft-Server/
 docker-compose up -d
 ```
 
 ## 🔐 Authentication Integration
 
-This repository includes comprehensive authentication integration using the Hydra system:
+This repository includes comprehensive authentication integration using the Hydra system. Applications are typically hosted at `hydra.newpaltz.edu/students/{username}/{project}/` and integrate with the centralized NP Access authentication service.
 
 ### Key Features
 - **JWT-based Authentication**: Simple token verification
@@ -156,12 +167,17 @@ class HydraAuth {
 ## 🔧 Configuration
 
 ### Hydra Authentication
-All services integrate with the Hydra authentication system:
+All services integrate with the Hydra authentication system. Student projects are hosted at:
 
+```
+https://hydra.newpaltz.edu/students/{username}/{project_name}/
+```
+
+**Environment Configuration**:
 ```bash
 # Environment variables
 HYDRA_BASE_URL=https://hydra.newpaltz.edu
-RETURN_TO=https://yourapp.newpaltz.edu/
+RETURN_TO=https://hydra.newpaltz.edu/students/{username}/{project_name}/
 ```
 
 ### Service-Specific Configuration
@@ -206,21 +222,6 @@ RETURN_TO=https://yourapp.newpaltz.edu/
 - [ ] Tokens haven't expired
 - [ ] Return URL is properly encoded
 
-## 🤝 Contributing
-
-This repository contains infrastructure configurations for New Paltz University services. For modifications or improvements:
-
-1. Test changes in development environment
-2. Update documentation as needed
-3. Follow security best practices
-4. Coordinate with IT Services for production deployments
-
-## 📞 Support
-
-For additional support:
-- Contact New Paltz IT Services
-- Refer to the official Hydra documentation
-- Check the comprehensive guides in the `Guides/` directory
 
 ---
 
