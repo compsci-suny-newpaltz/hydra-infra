@@ -3,6 +3,14 @@ const express = require("express");
 const bodyParser = require("body-parser");
 const cookieParser = require("cookie-parser");
 const { Rcon } = require("rcon-client");
+const sqlite3 = require("sqlite3").verbose();
+
+const db = new sqlite3.Database("/minecraft-data/whitelist.db");
+
+db.serialize(() => {
+  db.run("CREATE TABLE IF NOT EXISTS users (email TEXT PRIMARY KEY, minecraft_username TEXT)");
+  db.run("CREATE TABLE IF NOT EXISTS admins (email TEXT PRIMARY KEY)");
+});
 
 const app = express();
 app.set("trust proxy", 1);
@@ -53,8 +61,34 @@ async function requireHydraLogin(req, res, next) {
   }
 }
 
+function isAdmin(email) {
+  return new Promise((resolve, reject) => {
+    db.get("SELECT email FROM admins WHERE email = ?", [email], (err, row) => {
+      if (err) return reject(err);
+      resolve(!!row);
+    });
+  });
+}
+
+async function requireFaculty(req, res, next) {
+  const roles = (req.user && Array.isArray(req.user.roles)) ? req.user.roles.map(r => r.toLowerCase()) : [];
+  if (roles.includes('faculty') || await isAdmin(req.user.email)) {
+    return next();
+  }
+  res.status(403).send("Faculty/admin only.");
+}
+
 // Apply auth to everything (static + APIs)
 app.use(requireHydraLogin);
+
+app.get('/', async (req, res) => {
+  const roles = (req.user && Array.isArray(req.user.roles)) ? req.user.roles.map(r => r.toLowerCase()) : [];
+  if (roles.includes('faculty') || await isAdmin(req.user.email)) {
+    res.sendFile(__dirname + '/public/faculty.html');
+  } else {
+    res.sendFile(__dirname + '/public/student.html');
+  }
+});
 
 app.use(express.static("public"));
 
@@ -77,7 +111,64 @@ async function withRcon(fn) {
   }
 }
 
-app.get("/api/status", async (_req, res) => {
+app.get("/api/me", (req, res) => {
+  res.json({ ok: true, user: req.user });
+});
+
+app.get("/api/my-username", (req, res) => {
+  db.get("SELECT minecraft_username FROM users WHERE email = ?", [req.user.email], (err, row) => {
+    if (err) {
+      return res.status(500).json({ ok: false, error: err.message });
+    }
+    res.json({ ok: true, minecraft_username: row ? row.minecraft_username : null });
+  });
+});
+
+app.post("/api/my-username", async (req, res) => {
+  const minecraft_username = (req.body.minecraft_username || "").trim();
+  if (!minecraft_username) {
+    return res.status(400).json({ ok: false, error: "Minecraft username required" });
+  }
+
+  // First, find the old username if it exists
+  db.get("SELECT minecraft_username FROM users WHERE email = ?", [req.user.email], async (err, row) => {
+    if (err) {
+      return res.status(500).json({ ok: false, error: err.message });
+    }
+    const old_username = row ? row.minecraft_username : null;
+
+    // Now, update the database with the new username
+    db.run("REPLACE INTO users (email, minecraft_username) VALUES (?, ?)", [req.user.email, minecraft_username], async function(err) {
+      if (err) {
+        return res.status(500).json({ ok: false, error: err.message });
+      }
+      try {
+        // If there was an old username, remove it from the whitelist
+        if (old_username && old_username !== minecraft_username) {
+          await withRcon(rcon => rcon.send(`whitelist remove ${old_username}`));
+        }
+        // Add the new username to the whitelist and ensure it's on
+        await withRcon(rcon => rcon.send(`whitelist add ${minecraft_username}`));
+        await withRcon(rcon => rcon.send("whitelist on"));
+        res.json({ ok: true, message: "Saved!" });
+      } catch (e) {
+        res.status(500).json({ ok: false, error: e.message });
+      }
+    });
+  });
+});
+
+app.get("/api/all-users", requireFaculty, (req, res) => {
+  db.all("SELECT email, minecraft_username FROM users", [], (err, rows) => {
+    if (err) {
+      return res.status(500).json({ ok: false, error: err.message });
+    }
+    res.json({ ok: true, users: rows });
+  });
+});
+
+
+app.get("/api/status", requireFaculty, async (_req, res) => {
   try {
     const reply = await withRcon((r) => r.send("list"));
     res.json({ ok: true, reply });
@@ -87,7 +178,7 @@ app.get("/api/status", async (_req, res) => {
 });
 
 // Ensure whitelist is on
-app.post("/api/enable", async (_req, res) => {
+app.post("/api/enable", requireFaculty, async (_req, res) => {
   try {
     const reply = await withRcon((r) => r.send("whitelist on"));
     res.json({ ok: true, reply });
@@ -96,7 +187,7 @@ app.post("/api/enable", async (_req, res) => {
   }
 });
 
-app.post("/api/add", async (req, res) => {
+app.post("/api/add", requireFaculty, async (req, res) => {
   const name = (req.body.name || "").trim();
   if (!name) return res.status(400).json({ ok: false, error: "Name required" });
 
@@ -110,7 +201,7 @@ app.post("/api/add", async (req, res) => {
   }
 });
 
-app.post("/api/remove", async (req, res) => {
+app.post("/api/remove", requireFaculty, async (req, res) => {
   const name = (req.body.name || "").trim();
   if (!name) return res.status(400).json({ ok: false, error: "Name required" });
 
@@ -122,7 +213,19 @@ app.post("/api/remove", async (req, res) => {
   }
 });
 
-app.get("/api/list", async (_req, res) => {
+// Run arbitrary RCON command (faculty/admin only)
+app.post("/api/rcon", requireFaculty, async (req, res) => {
+  const cmd = (req.body && typeof req.body.cmd === "string") ? req.body.cmd.trim() : "";
+  if (!cmd) return res.status(400).json({ ok: false, error: "Command required" });
+  try {
+    const reply = await withRcon((r) => r.send(cmd));
+    res.json({ ok: true, reply });
+  } catch (e) {
+    res.status(500).json({ ok: false, error: e.message });
+  }
+});
+
+app.get("/api/list", requireFaculty, async (_req, res) => {
   try {
     const reply = await withRcon((r) => r.send("whitelist list"));
     // Reply looks like: "There are N whitelisted players: name1, name2"
